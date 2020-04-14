@@ -66,13 +66,14 @@ class CIFAR(Dataset):
 def get_datasets(data_path):
     X = np.load(os.path.join(data_path, "X.npy")).astype("float32")
     X = X.reshape(-1, 3, 32, 32)
-    y = np.load(os.path.join(data_path, "y.npy"))
+    y = np.load(os.path.join(data_path, "y.npy")).astype("int64")
     xmean = np.mean(X, (0, 2, 3))
     xstd = np.std(X, (0, 2, 3))
     transform = transforms.Normalize(list(xmean), list(xstd))
     training_set = CIFAR(X[:-10000], y[:-10000], transform)
     validation_set = CIFAR(X[-10000:], y[-10000:], transform)
-    return training_set, validation_set
+    mini_set = CIFAR(X[:1000], y[:1000], transform)
+    return training_set, validation_set, mini_set
 
 
 def plot(img, label=None):
@@ -81,3 +82,12 @@ def plot(img, label=None):
     if label:
         plt.title(label)
     plt.plot()
+
+
+def show_preds(net, dataset):
+    with torch.no_grad():
+        x_batch, y_batch = next(iter(dataset))
+        p = net(x_batch)
+        v, i = p.max(axis=1)
+        for pred, true in zip(i, y_batch):
+            print(f"pred {CIFAR.label_names[pred]}({CIFAR.label_names[true]})")
