@@ -76,6 +76,26 @@ def get_datasets(data_path):
     return training_set, validation_set, mini_set
 
 
+def get_datasets_res(data_path):
+    X = np.load(os.path.join(data_path, "X.npy")).astype("float32")
+    X = X.reshape(-1, 3, 32, 32)
+    y = np.load(os.path.join(data_path, "y.npy")).astype("int64")
+    xmean = np.mean(X, (0, 2, 3))
+    xstd = np.std(X, (0, 2, 3))
+    transform = transforms.Compose(
+        [
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(list(xmean), list(xstd)),
+        ]
+    )
+    training_set = CIFAR(X[:-10000], y[:-10000], transform)
+    validation_set = CIFAR(X[-10000:], y[-10000:], transform)
+    mini_set = CIFAR(X[:1000], y[:1000], transform)
+    return training_set, validation_set, mini_set
+
+
 def plot(img, label=None):
     plt.imshow(np.transpose(img, axes=[1, 2, 0]))
     plt.axis("off")
