@@ -77,10 +77,10 @@ class Net(nn.Module):
         self.fc_col = nn.Linear(64, 32)
 
     def forward(self, x):
-        x = self.bn1(self.pool(self.relu(self.do1(self.conv1(x)))))
-        x = self.bn2(self.pool(self.relu(self.do2(self.conv2(x)))))
-        # x = self.bn1(self.pool(self.relu(self.conv1(x))))
-        # x = self.bn2(self.pool(self.relu(self.conv2(x))))
+        # x = self.bn1(self.pool(self.relu(self.do1(self.conv1(x)))))
+        # x = self.bn2(self.pool(self.relu(self.do2(self.conv2(x)))))
+        x = self.bn1(self.pool(self.relu(self.conv1(x))))
+        x = self.bn2(self.pool(self.relu(self.conv2(x))))
         x = self.flatten(self.pool(self.relu(self.conv3(x))))
         row = self.fc_row(x)
         col = self.fc_col(x)
@@ -90,7 +90,7 @@ class Net(nn.Module):
 train_set = DataLoader(Grid(X_train, y_train), batch_size=128, shuffle=True)
 net = Net()
 crit = nn.CrossEntropyLoss()
-opt = optim.Adam(net.parameters(), lr=0.01)
+opt = optim.Adam(net.parameters(), lr=0.01, weight_decay=0.01)
 net.train()
 n_epochs = 100
 for epoch in range(1, n_epochs + 1):

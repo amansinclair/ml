@@ -4,9 +4,11 @@ import pickle
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 import torch
+import torch.nn as nn
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import time
+from utils import get_output_shape
 
 
 def unpickle(file):
@@ -150,8 +152,24 @@ def plot(img, label=None):
 
 def show_preds(net, dataset):
     with torch.no_grad():
+        net.eval()
         x_batch, y_batch = next(iter(dataset))
         p = net(x_batch)
         v, i = p.max(axis=1)
         for pred, true in zip(i, y_batch):
             print(f"pred {CIFAR.label_names[pred]}({CIFAR.label_names[true]})")
+
+
+def get_CNN(sizes):
+    layers = []
+    current_size = 3
+    for size in sizes:
+        layers.append(nn.Conv2d(current_size, size, 3))
+        layers.append(nn.BatchNorm2d(size))
+        layers.append(nn.ReLU())
+        layers.append(nn.MaxPool2d(2))
+        current_size = size
+    layers.append(nn.Flatten())
+    output_size = get_output_shape(nn.Sequential(*layers), (1, 3, 32, 32))[1]
+    layers.append(nn.Linear(output_size, 10))
+    return nn.Sequential(*layers)
