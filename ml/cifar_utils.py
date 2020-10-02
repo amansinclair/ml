@@ -3,6 +3,7 @@ import numpy as np
 import pickle
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
+import torch.nn.functional as F
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -30,29 +31,6 @@ def create_arrays(folder):
         array = np.concatenate(d)
         path = os.path.join(folder, filename)
         np.save(path, array)
-
-
-def resave_for_resnet(data_path, batch_size=400):
-    X = np.load(os.path.join(data_path, "X.npy"))
-    X = X.reshape(-1, 3, 32, 32)
-    for X, name in ((X[:50000], "X_train"), (X[50000:], "X_valid")):
-        create_batches(X, batch_size, data_path, name)
-
-
-def create_batches(X, batch_size, data_path, name):
-    for i, idx in tqdm(enumerate(range(0, X.shape[0], batch_size))):
-        new_batch = np.zeros((batch_size, 3, 224, 224), dtype="uint8")
-        for j, sample in enumerate(X[idx : idx + batch_size]):
-            new_batch[j] = resize_array(sample)
-        b_name = name + "_" + str(i + 1) + ".npy"
-        np.save(os.path.join(data_path, b_name), new_batch)
-
-
-def resize_array(a):
-    new_a = np.zeros((3, 256, 256), dtype="uint8")
-    for i, comp in enumerate(a):
-        new_a[i] = np.kron(comp, np.ones((8, 8), dtype="uint8"))
-    return new_a[:, 16:240, 16:240]
 
 
 class CIFAR(Dataset):
@@ -90,32 +68,6 @@ class CIFAR(Dataset):
         return img.astype("int")
 
 
-class CIFARRES(CIFAR):
-    def __init__(self, data_path, y, transform, valid=False):
-        self.data_path = data_path
-        self.valid = valid
-        self.y = torch.from_numpy(y)
-        self.transform = transform
-
-    def __getitem__(self, idx):
-        new_idx = idx % 400
-        if self.valid:
-            i = int((idx / len(self)) * 25)
-            name = f"X_valid_{i + 1}.npy"
-        else:
-            i = int((idx / len(self)) * 25)
-            name = f"X_train_{i + 1}.npy"
-        X = np.load(os.path.join(self.data_path, name)).astype("float32")
-        x = torch.from_numpy(X[new_idx])
-        return self.transform(x), self.y[idx]
-
-    def __len__(self):
-        if self.valid:
-            return 10000
-        else:
-            return 10000
-
-
 def get_datasets(data_path):
     X = np.load(os.path.join(data_path, "X.npy")).astype("float32")
     X = X.reshape(-1, 3, 32, 32)
@@ -125,21 +77,9 @@ def get_datasets(data_path):
     transform = transforms.Normalize(list(xmean), list(xstd))
     training_set = CIFAR(X[:-10000], y[:-10000], transform)
     validation_set = CIFAR(X[-10000:], y[-10000:], transform)
-    mini_set = CIFAR(X[:1000], y[:1000], transform)
-    return training_set, validation_set, mini_set
-
-
-def get_datasets_res(data_path):
-    X = np.load(os.path.join(data_path, "X.npy")).astype("float32")
-    X = X.reshape(-1, 3, 32, 32)
-    X = X / 255.0
-    y = np.load(os.path.join(data_path, "y.npy")).astype("int64")
-    xmean = (0.485, 0.456, 0.406)
-    xstd = (0.229, 0.224, 0.225)
-    transform = transforms.Normalize(xmean, xstd)
-    training_set = CIFAR(X[:-10000], y[:-10000], transform)
-    validation_set = CIFAR(X[-10000:], y[-10000:], transform)
-    return training_set, validation_set
+    mini_train_set = CIFAR(X[:1000], y[:1000], transform)
+    mini_test_set = CIFAR(X[-1000:], y[-1000:], transform)
+    return training_set, validation_set, mini_train_set, mini_test_set
 
 
 def plot(img, label=None):
@@ -160,16 +100,48 @@ def show_preds(net, dataset):
             print(f"pred {CIFAR.label_names[pred]}({CIFAR.label_names[true]})")
 
 
-def get_CNN(sizes):
-    layers = []
-    current_size = 3
-    for size in sizes:
-        layers.append(nn.Conv2d(current_size, size, 3))
-        layers.append(nn.BatchNorm2d(size))
-        layers.append(nn.ReLU())
-        layers.append(nn.MaxPool2d(2))
-        current_size = size
-    layers.append(nn.Flatten())
-    output_size = get_output_shape(nn.Sequential(*layers), (1, 3, 32, 32))[1]
-    layers.append(nn.Linear(output_size, 10))
-    return nn.Sequential(*layers)
+class RESNET(nn.Module):
+    filter_groups = [16, 32, 64]
+
+    def __init__(self, n_blocks):
+        super().__init__()
+        start_filters = self.filter_groups[0]
+        conv1 = nn.Conv2d(
+            start_filters, start_filters, kernel_size=(3, 3), stride=1, padding=1
+        )
+        layers = [conv1]
+        for n_filters in self.filter_groups:
+            for block in range(n_blocks):
+                subsample = block == 0
+                layers.append(RESBLOCK(n_filters, subsample))
+        layers.append(nn.AdaptiveAvgPool2d(1))
+        layers.append(nn.Flatten)
+        layers.append(nn.Linear(64, 10))
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.layers(x)
+
+
+class RESBLOCK(nn.Module):
+    def __init__(self, n_filters, subsample=False):
+        super().__init__()
+        self.subsample = subsample
+        initial_stride = 2 if subsample else 1
+        self.conv1 = nn.Conv2d(
+            n_filters, n_filters, kernel_size=(3, 3), stride=initial_stride, padding=0
+        )
+        self.bn1 = nn.BatchNorm2d(n_filters)
+        self.conv2 = nn.Conv2d(
+            n_filters, n_filters, kernel_size=(3, 3), stride=1, padding=0
+        )
+        self.bn2 = nn.BatchNorm2d(n_filters)
+
+    def forward(self, x):
+        if self.subsample:
+            shortcut = 0  # padd x with 0s
+        else:
+            shortcut = x
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(shortcut + (self.bn2(self.conv2(x))))
+        return x
