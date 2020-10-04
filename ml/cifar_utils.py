@@ -101,45 +101,78 @@ def show_preds(net, dataset):
 
 
 class RESNET(nn.Module):
+    """Resnet for CIFAR10 implemented the same as in original paper except for shortcut connections."""
+
     filter_groups = [16, 32, 64]
 
     def __init__(self, n_blocks):
         super().__init__()
-        start_filters = self.filter_groups[0]
+        current_filters = self.filter_groups[0]
         conv1 = nn.Conv2d(
-            start_filters, start_filters, kernel_size=(3, 3), stride=1, padding=1
+            current_filters,
+            current_filters,
+            kernel_size=(3, 3),
+            stride=1,
+            padding=1,
+            bias=False,
         )
-        layers = [conv1]
+        bn1 = nn.BatchNorm2d(current_filters)
+        relu = nn.ReLU(inplace=True)
+        layers = [conv1, bn1, relu]
         for n_filters in self.filter_groups:
             for block in range(n_blocks):
-                subsample = block == 0
-                layers.append(RESBLOCK(n_filters, subsample))
+                layers.append(RESBLOCK(current_filters, n_filters))
+                current_filters = n_filters
         layers.append(nn.AdaptiveAvgPool2d(1))
         layers.append(nn.Flatten)
         layers.append(nn.Linear(64, 10))
-        self.layers = nn.Sequential(*layers)
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.layers(x)
+        return self.net(x)
 
 
 class RESBLOCK(nn.Module):
-    def __init__(self, n_filters, subsample=False):
+    """Standard Resblock. Shortcut done with 1x1 Conv layer instead of padding with 0s."""
+
+    def __init__(self, n_filters_in, n_filters_out):
         super().__init__()
-        self.subsample = subsample
-        initial_stride = 2 if subsample else 1
+        self.subsample = True if n_filters_in != n_filters_out else False
+        initial_stride = 2 if self.subsample else 1
+        self.shortcut = (
+            nn.Conv2d(
+                n_filters_in,
+                n_filters_out,
+                kernel_size=(1, 1),
+                stride=2,
+                padding=0,
+                bias=False,
+            )
+            if self.subsample
+            else None
+        )
         self.conv1 = nn.Conv2d(
-            n_filters, n_filters, kernel_size=(3, 3), stride=initial_stride, padding=0
+            n_filters_in,
+            n_filters_out,
+            kernel_size=(3, 3),
+            stride=initial_stride,
+            padding=1,
+            bias=False,
         )
-        self.bn1 = nn.BatchNorm2d(n_filters)
+        self.bn1 = nn.BatchNorm2d(n_filters_out)
         self.conv2 = nn.Conv2d(
-            n_filters, n_filters, kernel_size=(3, 3), stride=1, padding=0
+            n_filters_out,
+            n_filters_out,
+            kernel_size=(3, 3),
+            stride=1,
+            padding=1,
+            bias=False,
         )
-        self.bn2 = nn.BatchNorm2d(n_filters)
+        self.bn2 = nn.BatchNorm2d(n_filters_out)
 
     def forward(self, x):
         if self.subsample:
-            shortcut = 0  # padd x with 0s
+            shortcut = self.shortcut(x)
         else:
             shortcut = x
         x = F.relu(self.bn1(self.conv1(x)))
