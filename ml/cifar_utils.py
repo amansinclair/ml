@@ -19,6 +19,7 @@ def unpickle(file):
 
 
 def create_arrays(folder):
+    """Convert pickle file to numpy arrays."""
     PTN = "_batch"
     files = [os.path.join(folder, f) for f in os.listdir(folder) if PTN in f]
     data = []
@@ -72,13 +73,20 @@ def get_datasets(data_path):
     X = np.load(os.path.join(data_path, "X.npy")).astype("float32")
     X = X.reshape(-1, 3, 32, 32)
     y = np.load(os.path.join(data_path, "y.npy")).astype("int64")
-    xmean = np.mean(X, (0, 2, 3))
-    xstd = np.std(X, (0, 2, 3))
-    transform = transforms.Normalize(list(xmean), list(xstd))
-    training_set = CIFAR(X[:-10000], y[:-10000], transform)
-    validation_set = CIFAR(X[-10000:], y[-10000:], transform)
-    mini_train_set = CIFAR(X[:1000], y[:1000], transform)
-    mini_test_set = CIFAR(X[-1000:], y[-1000:], transform)
+    xmean = list(np.mean(X, (0, 2, 3)))
+    xstd = list(np.std(X, (0, 2, 3)))
+    normalize = transforms.Normalize(xmean, xstd)
+    train_transform = transforms.Compose(
+        [
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(size=(32, 32), padding=4),
+            normalize,
+        ]
+    )
+    training_set = CIFAR(X[:-10000], y[:-10000], train_transform)
+    validation_set = CIFAR(X[-10000:], y[-10000:], normalize)
+    mini_train_set = CIFAR(X[:1000], y[:1000], train_transform)
+    mini_test_set = CIFAR(X[-1000:], y[-1000:], normalize)
     return training_set, validation_set, mini_train_set, mini_test_set
 
 
@@ -100,25 +108,51 @@ def show_preds(net, dataset):
             print(f"pred {CIFAR.label_names[pred]}({CIFAR.label_names[true]})")
 
 
+class ConvLayer(nn.Module):
+    """2dConv Layer with Batch normalization."""
+
+    kernel_size = (3, 3)
+    padding = 1
+    bias = False
+    stride = 1
+
+    def __init__(self, input_size, output_size, stride=None):
+        super().__init__()
+        stride = stride if stride else self.stride
+        self.conv = nn.Conv2d(
+            input_size,
+            output_size,
+            kernel_size=self.kernel_size,
+            stride=stride,
+            padding=self.padding,
+            bias=self.bias,
+        )
+        self.bn = nn.BatchNorm2d(output_size)
+
+    def forward(self, x):
+        return self.bn(self.conv(x))
+
+
+class ShortcutConv(ConvLayer):
+    """Shortcut with 1x1 Conv layer instead of padding with 0s."""
+
+    kernel_size = (1, 1)
+    padding = 0
+    bias = False
+    stride = 2
+
+
 class RESNET(nn.Module):
-    """Resnet for CIFAR10 implemented the same as in original paper except for shortcut connections."""
+    """Resnet for CIFAR10 implemented the same as in original paper except for shortcut resize."""
 
     filter_groups = [16, 32, 64]
 
     def __init__(self, n_blocks):
         super().__init__()
         current_filters = self.filter_groups[0]
-        conv1 = nn.Conv2d(
-            current_filters,
-            current_filters,
-            kernel_size=(3, 3),
-            stride=1,
-            padding=1,
-            bias=False,
-        )
-        bn1 = nn.BatchNorm2d(current_filters)
+        conv = ConvLayer(current_filters, current_filters, stride=1)
         relu = nn.ReLU(inplace=True)
-        layers = [conv1, bn1, relu]
+        layers = [conv, relu]
         for n_filters in self.filter_groups:
             for block in range(n_blocks):
                 layers.append(RESBLOCK(current_filters, n_filters))
@@ -133,48 +167,18 @@ class RESNET(nn.Module):
 
 
 class RESBLOCK(nn.Module):
-    """Standard Resblock. Shortcut done with 1x1 Conv layer instead of padding with 0s."""
+    """Standard Resblock. """
 
-    def __init__(self, n_filters_in, n_filters_out):
+    def __init__(self, n_in, n_out):
         super().__init__()
-        self.subsample = True if n_filters_in != n_filters_out else False
+        self.subsample = True if n_in != n_out else False
         initial_stride = 2 if self.subsample else 1
-        self.shortcut = (
-            nn.Conv2d(
-                n_filters_in,
-                n_filters_out,
-                kernel_size=(1, 1),
-                stride=2,
-                padding=0,
-                bias=False,
-            )
-            if self.subsample
-            else None
-        )
-        self.conv1 = nn.Conv2d(
-            n_filters_in,
-            n_filters_out,
-            kernel_size=(3, 3),
-            stride=initial_stride,
-            padding=1,
-            bias=False,
-        )
-        self.bn1 = nn.BatchNorm2d(n_filters_out)
-        self.conv2 = nn.Conv2d(
-            n_filters_out,
-            n_filters_out,
-            kernel_size=(3, 3),
-            stride=1,
-            padding=1,
-            bias=False,
-        )
-        self.bn2 = nn.BatchNorm2d(n_filters_out)
+        self.shortcut_conv = ShortcutConv(n_in, n_out) if self.subsample else None
+        self.conv1 = ConvLayer(n_in, n_out, stride=initial_stride)
+        self.conv2 = ConvLayer(n_out, n_out)
 
     def forward(self, x):
-        if self.subsample:
-            shortcut = self.shortcut(x)
-        else:
-            shortcut = x
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(shortcut + (self.bn2(self.conv2(x))))
+        shortcut = self.shortcut_conv(x) if self.subsample else x
+        x = F.relu(self.conv1(x))
+        x = F.relu(shortcut + self.conv2(x))
         return x
