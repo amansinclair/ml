@@ -6,7 +6,7 @@ from sklearn.metrics import accuracy_score as acc
 from prettytable import PrettyTable
 
 
-def count_parameters(model):
+def count_parameters(model, show_table=False):
     """Taken from https://stackoverflow.com/questions/49201236/check-the-total-number-of-parameters-in-a-pytorch-model"""
     table = PrettyTable(["Modules", "Parameters"])
     total_params = 0
@@ -16,9 +16,17 @@ def count_parameters(model):
         param = parameter.numel()
         table.add_row([name, param])
         total_params += param
-    print(table)
+    if show_table:
+        print(table)
     print(f"Total Trainable Params: {total_params}")
     return total_params
+
+
+def accuracy(labels, probs):
+    v, i = probs.max(axis=1)
+    size = len(labels)
+    n_false = (i == labels).sum().item()
+    return n_false / size
 
 
 def train(net, crit, acc, opt, train, val, n_epochs=1):
@@ -33,8 +41,7 @@ def train(net, crit, acc, opt, train, val, n_epochs=1):
             opt.zero_grad()
             net.train()
             p = net(X)
-            v, i = p.max(axis=1)
-            epoch_acc.append(acc(y, i))
+            epoch_acc.append(acc(y, p))
             loss = crit(p, y)
             epoch_loss.append(loss.item())
             loss.backward()
@@ -45,9 +52,8 @@ def train(net, crit, acc, opt, train, val, n_epochs=1):
             val_acc = []
             for X, y in val:
                 p = net(X)
-                v, i = p.max(axis=1)
                 val_loss.append(crit(p, y).item())
-                val_acc.append(acc(y, i))
+                val_acc.append(acc(y, p))
         test_loss.append(np.mean(val_loss))
         test_acc.append(np.mean(val_acc))
         train_loss.append(np.mean(epoch_loss))

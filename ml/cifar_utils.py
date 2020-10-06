@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import time
 from utils import get_output_shape
+from prettytable import PrettyTable
 
 
 def unpickle(file):
@@ -35,6 +36,7 @@ def create_arrays(folder):
 
 
 class CIFAR(Dataset):
+    """CIFAR10 as torch dataset."""
 
     label_names = [
         "airplane",
@@ -50,8 +52,8 @@ class CIFAR(Dataset):
     ]
 
     def __init__(self, X, y, transform):
-        self.X = torch.from_numpy(X)
-        self.y = torch.from_numpy(y)
+        self.X = X
+        self.y = y
         self.transform = transform
 
     def __len__(self):
@@ -65,33 +67,39 @@ class CIFAR(Dataset):
         return self.label_names[int(label)]
 
     def get_image(self, idx):
-        img = self.X[idx].numpy()
+        img = np.transpose(self.X[idx], axes=[0, 1, 2])
         return img.astype("int")
 
 
 def get_datasets(data_path):
-    X = np.load(os.path.join(data_path, "X.npy")).astype("float32")
+    X = np.load(os.path.join(data_path, "X.npy"))  # .astype("float32")
     X = X.reshape(-1, 3, 32, 32)
+    X = np.transpose(X, axes=[0, 2, 3, 1])
     y = np.load(os.path.join(data_path, "y.npy")).astype("int64")
-    xmean = list(np.mean(X, (0, 2, 3)))
-    xstd = list(np.std(X, (0, 2, 3)))
-    normalize = transforms.Normalize(xmean, xstd)
+    xmean = np.mean(X, (0, 1, 2))
+    xstd = np.std(X, (0, 1, 2))
+    normalize = transforms.Normalize(list(xmean / 255), list(xstd / 255))
     train_transform = transforms.Compose(
         [
+            transforms.ToPILImage(mode="RGB"),
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(size=(32, 32), padding=4),
+            transforms.ToTensor(),
             normalize,
         ]
     )
+    test_transform = transforms.Compose(
+        [transforms.ToPILImage(mode="RGB"), transforms.ToTensor(), normalize]
+    )
     training_set = CIFAR(X[:-10000], y[:-10000], train_transform)
-    validation_set = CIFAR(X[-10000:], y[-10000:], normalize)
+    validation_set = CIFAR(X[-10000:], y[-10000:], test_transform)
     mini_train_set = CIFAR(X[:1000], y[:1000], train_transform)
-    mini_test_set = CIFAR(X[-1000:], y[-1000:], normalize)
+    mini_test_set = CIFAR(X[-1000:], y[-1000:], test_transform)
     return training_set, validation_set, mini_train_set, mini_test_set
 
 
 def plot(img, label=None):
-    plt.imshow(np.transpose(img, axes=[1, 2, 0]))
+    plt.imshow(img)
     plt.axis("off")
     if label:
         plt.title(label)
@@ -99,13 +107,21 @@ def plot(img, label=None):
 
 
 def show_preds(net, dataset):
+    table = PrettyTable(["Correct", "Prediction", "Correct Label"])
     with torch.no_grad():
         net.eval()
         x_batch, y_batch = next(iter(dataset))
         p = net(x_batch)
         v, i = p.max(axis=1)
         for pred, true in zip(i, y_batch):
-            print(f"pred {CIFAR.label_names[pred]}({CIFAR.label_names[true]})")
+            table.add_row(
+                [
+                    (pred == true).item(),
+                    CIFAR.label_names[pred],
+                    CIFAR.label_names[true],
+                ]
+            )
+    print(table)
 
 
 class ConvLayer(nn.Module):
@@ -150,7 +166,7 @@ class RESNET(nn.Module):
     def __init__(self, n_blocks):
         super().__init__()
         current_filters = self.filter_groups[0]
-        conv = ConvLayer(current_filters, current_filters, stride=1)
+        conv = ConvLayer(3, current_filters, stride=1)
         relu = nn.ReLU(inplace=True)
         layers = [conv, relu]
         for n_filters in self.filter_groups:
@@ -158,7 +174,7 @@ class RESNET(nn.Module):
                 layers.append(RESBLOCK(current_filters, n_filters))
                 current_filters = n_filters
         layers.append(nn.AdaptiveAvgPool2d(1))
-        layers.append(nn.Flatten)
+        layers.append(nn.Flatten())
         layers.append(nn.Linear(64, 10))
         self.net = nn.Sequential(*layers)
 
