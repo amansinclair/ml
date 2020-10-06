@@ -78,5 +78,41 @@ def plot_loss_acc(train_loss, train_acc, test_loss, test_acc):
     plt.show()
 
 
+def plot_loss(train_loss, test_loss):
+    epochs = np.arange(len(train_loss))
+    plt.figure(figsize=(15, 8))
+    plt.plot(epochs, train_loss, label="train")
+    plt.plot(epochs, test_loss, label="test")
+    plt.legend()
+    plt.show()
+
+
 def get_output_shape(model, image_dim):
     return model(torch.rand(*(image_dim))).data.shape
+
+
+def train_reg(net, crit, opt, train, val, n_epochs=1):
+    train_loss = []
+    test_loss = []
+    for epoch in range(n_epochs):
+        epoch_loss = []
+        for X, y in bar(train):
+            opt.zero_grad()
+            net.train()
+            p = net(X)
+            loss = crit(p, y)
+            epoch_loss.append(loss.item())
+            loss.backward()
+            opt.step()
+        with torch.no_grad():
+            net.eval()
+            val_loss = []
+            for X, y in val:
+                p = net(X)
+                val_loss.append(crit(p, y).item())
+        test_loss.append(np.mean(val_loss))
+        train_loss.append(np.mean(epoch_loss))
+        print(
+            f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}, V Loss:{np.mean(val_loss):.3f}"
+        )
+    return train_loss, test_loss
