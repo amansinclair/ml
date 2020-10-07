@@ -5,4 +5,4 @@
 - Transfer learning for classification using a pretrained Resnet(TIMM) on Caltech101 ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Caltech.ipynb)).
 
 ## Forecasting
-- Sales forecasts.
+- Weekly temperature forecasts based on Melbourne daily minimum temperatures ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Melbourne.ipynb)).
