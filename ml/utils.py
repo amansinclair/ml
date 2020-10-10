@@ -25,11 +25,25 @@ def count_parameters(model, show_table=False):
 def accuracy(labels, probs):
     v, i = probs.max(axis=1)
     size = len(labels)
-    n_false = (i == labels).sum().item()
-    return n_false / size
+    n_true = (i == labels).sum().item()
+    return n_true / size
 
 
-def train(net, crit, acc, opt, train, val, n_epochs=1):
+def top_n(probs, n=3):
+    s, idxes = torch.sort(probs, descending=True)
+    return idxes[:, :n]
+
+
+def top_n_accuracy(labels, probs, n=3):
+    size = len(labels)
+    total = 0
+    top_probs = top_n(probs, n)
+    for col in range(n):
+        total += (top_probs[:, col] == labels).sum().item()
+    return total / size
+
+
+def train(net, crit, acc, opt, train, val=None, n_epochs=1):
     train_loss = []
     train_acc = []
     test_loss = []
@@ -46,21 +60,27 @@ def train(net, crit, acc, opt, train, val, n_epochs=1):
             epoch_loss.append(loss.item())
             loss.backward()
             opt.step()
-        with torch.no_grad():
-            net.eval()
-            val_loss = []
-            val_acc = []
-            for X, y in val:
-                p = net(X)
-                val_loss.append(crit(p, y).item())
-                val_acc.append(acc(y, p))
-        test_loss.append(np.mean(val_loss))
-        test_acc.append(np.mean(val_acc))
+        if val:
+            with torch.no_grad():
+                net.eval()
+                val_loss = []
+                val_acc = []
+                for X, y in val:
+                    p = net(X)
+                    val_loss.append(crit(p, y).item())
+                    val_acc.append(acc(y, p))
+            test_loss.append(np.mean(val_loss))
+            test_acc.append(np.mean(val_acc))
         train_loss.append(np.mean(epoch_loss))
         train_acc.append(np.mean(epoch_acc))
-        print(
-            f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}, T acc:{np.mean(epoch_acc):.3f} V Loss:{np.mean(val_loss):.3f}, V acc:{np.mean(val_acc):.3f}"
-        )
+        if val:
+            print(
+                f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}, T acc:{np.mean(epoch_acc):.3f} V Loss:{np.mean(val_loss):.3f}, V acc:{np.mean(val_acc):.3f}"
+            )
+        else:
+            print(
+                f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}, T acc:{np.mean(epoch_acc):.3f}"
+            )
     return train_loss, train_acc, test_loss, test_acc
 
 
