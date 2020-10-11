@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm.notebook import tqdm as bar
+from tqdm.auto import tqdm
 from sklearn.metrics import accuracy_score as acc
 from prettytable import PrettyTable
 
@@ -43,7 +43,7 @@ def top_n_accuracy(labels, probs, n=3):
     return total / size
 
 
-def train(net, crit, acc, opt, train, val=None, n_epochs=1):
+def train(net, crit, opt, train, val=None, metric=None, n_epochs=1):
     train_loss = []
     train_acc = []
     test_loss = []
@@ -51,11 +51,13 @@ def train(net, crit, acc, opt, train, val=None, n_epochs=1):
     for epoch in range(n_epochs):
         epoch_loss = []
         epoch_acc = []
-        for X, y in bar(train):
+        pbar = tqdm(train)
+        for X, y in pbar:
             opt.zero_grad()
             net.train()
             p = net(X)
-            epoch_acc.append(acc(y, p))
+            if metric:
+                epoch_acc.append(metric(y, p))
             loss = crit(p, y)
             epoch_loss.append(loss.item())
             loss.backward()
@@ -68,19 +70,20 @@ def train(net, crit, acc, opt, train, val=None, n_epochs=1):
                 for X, y in val:
                     p = net(X)
                     val_loss.append(crit(p, y).item())
-                    val_acc.append(acc(y, p))
+                    if metric:
+                        val_acc.append(metric(y, p))
             test_loss.append(np.mean(val_loss))
             test_acc.append(np.mean(val_acc))
         train_loss.append(np.mean(epoch_loss))
         train_acc.append(np.mean(epoch_acc))
+        msg = f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}"
+        if metric:
+            msg += f", T Met:{np.mean(epoch_acc):.3f}"
         if val:
-            print(
-                f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}, T acc:{np.mean(epoch_acc):.3f} V Loss:{np.mean(val_loss):.3f}, V acc:{np.mean(val_acc):.3f}"
-            )
-        else:
-            print(
-                f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}, T acc:{np.mean(epoch_acc):.3f}"
-            )
+            msg += f", V Loss:{np.mean(val_loss):.3f}"
+            if metric:
+                msg += f", V Met:{np.mean(val_acc):.3f}"
+        print(msg)
     return train_loss, train_acc, test_loss, test_acc
 
 
@@ -110,29 +113,3 @@ def plot_loss(train_loss, test_loss):
 def get_output_shape(model, image_dim):
     return model(torch.rand(*(image_dim))).data.shape
 
-
-def train_reg(net, crit, opt, train, val, n_epochs=1):
-    train_loss = []
-    test_loss = []
-    for epoch in range(n_epochs):
-        epoch_loss = []
-        for X, y in bar(train):
-            opt.zero_grad()
-            net.train()
-            p = net(X)
-            loss = crit(p, y)
-            epoch_loss.append(loss.item())
-            loss.backward()
-            opt.step()
-        with torch.no_grad():
-            net.eval()
-            val_loss = []
-            for X, y in val:
-                p = net(X)
-                val_loss.append(crit(p, y).item())
-        test_loss.append(np.mean(val_loss))
-        train_loss.append(np.mean(epoch_loss))
-        print(
-            f"Epoch:{epoch + 1}, T Loss:{np.mean(epoch_loss):.3f}, V Loss:{np.mean(val_loss):.3f}"
-        )
-    return train_loss, test_loss
