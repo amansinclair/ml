@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm.auto import tqdm
+from tqdm.notebook import tqdm
 from sklearn.metrics import accuracy_score as acc
 from prettytable import PrettyTable
 
@@ -43,7 +43,7 @@ def top_n_accuracy(labels, probs, n=3):
     return total / size
 
 
-def train(net, crit, opt, train, val=None, metric=None, n_epochs=1):
+def train(net, crit, opt, train, val=None, metric=None, n_epochs=1, clip=0):
     train_loss = []
     train_acc = []
     test_loss = []
@@ -51,8 +51,7 @@ def train(net, crit, opt, train, val=None, metric=None, n_epochs=1):
     for epoch in range(n_epochs):
         epoch_loss = []
         epoch_acc = []
-        pbar = tqdm(train)
-        for X, y in pbar:
+        for X, y in tqdm(train):
             opt.zero_grad()
             net.train()
             p = net(X)
@@ -61,6 +60,8 @@ def train(net, crit, opt, train, val=None, metric=None, n_epochs=1):
             loss = crit(p, y)
             epoch_loss.append(loss.item())
             loss.backward()
+            if clip:
+                torch.nn.utils.clip_grad_norm_(net.parameters(), clip)
             opt.step()
         if val:
             with torch.no_grad():
