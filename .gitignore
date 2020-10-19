@@ -1,4 +1,6 @@
 *.pyc
 *.pyo
 .vscode
+*.pt
+*checkpoint*
 data/

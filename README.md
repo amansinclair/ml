@@ -9,4 +9,4 @@
 
 ### NLP
 - Sentiment analysis of IMDb dataset. A comparison of a simple bag of words model against RNN ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Imdb.ipynb)).
-- Word AutoComplete based on Sentiment140 twitter dataset. ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Sentiment140.ipynb)).
+- Word Autocorrect based on words from the Sentiment140 twitter dataset. ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Autocorrect.ipynb)).
