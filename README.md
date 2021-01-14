@@ -20,4 +20,5 @@ Digits from a style GAN using MNIST dataset.
 
 ### Generation
 
-- GAN for digits based on MNIST Dataset. To be completed...
+- DCGAN for digits based on MNIST Dataset. ([notebook](https://github.com/amansinclair/ml/blob/master/ml/MNIST_DCGAN.ipynb)).
+- StyleGAN for digits based on MNIST Dataset.([notebook](https://github.com/amansinclair/ml/blob/master/ml/MNIST_GAN_Style.ipynb)).
