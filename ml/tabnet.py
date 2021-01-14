@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 from sparsemax import Sparsemax
 
 
@@ -16,13 +16,15 @@ class TabNet(nn.Module):
         n_shared_blocks=1,
         shared_mask=False,
         relax=1,
-        ghost_norm=0,
+        ghost_size=0,
         sparsemax=True,
+        sparse_loss=False,
     ):
         super().__init__()
         self.na = na
         self.n_steps = n_steps
         self.relax = relax
+        self.sparse_loss = sparse_loss
         self.bn = nn.BatchNorm1d(n_features)
         self.relu = nn.ReLU()
         size = na + nd
@@ -51,7 +53,10 @@ class TabNet(nn.Module):
             p = p * (self.relax - m)
             xout += self.relu(xd)
             sparse_loss += ((-m * torch.log(m + 1e-08)).sum()) / x.shape[0]
-        return self.head(xout), sparse_loss / self.n_steps
+        if self.sparse_loss:
+            return self.head(xout), sparse_loss / self.n_steps
+        else:
+            return self.head(xout)
 
 
 class GhostNorm(nn.Module):
@@ -68,12 +73,16 @@ class GhostNorm(nn.Module):
 
 
 class TabMask(nn.Module):
-    def __init__(self, n_features, h=None, na=None, ghost_size, sparsemax):
+    def __init__(self, n_features, h=None, na=None, ghost_size=0, sparsemax=True):
         super().__init__()
         if h == None:
             h = nn.Linear(na, n_features, bias=False)
         self.h = h
-        self.bn = GhostNorm(size, ghost_size) if ghost_size else nn.BatchNorm1d(size)
+        self.bn = (
+            GhostNorm(n_features, ghost_size)
+            if ghost_size
+            else nn.BatchNorm1d(n_features)
+        )
         self.sm = Sparsemax() if sparsemax else nn.Softmax()
 
     def forward(self, xa, p):
