@@ -16,9 +16,9 @@ Digits from a style GAN using MNIST dataset.
 ### NLP
 
 - Sentiment analysis of IMDb dataset. A comparison of a simple bag of words model against RNN ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Imdb.ipynb)).
-- Word Autocorrect based on words from the Sentiment140 twitter dataset. ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Autocorrect.ipynb)).
+- Word Autocorrect based on words from the Sentiment140 twitter dataset ([notebook](https://github.com/amansinclair/ml/blob/master/ml/Autocorrect.ipynb)).
 
 ### Generation
 
-- DCGAN for digits based on MNIST Dataset. ([notebook](https://github.com/amansinclair/ml/blob/master/ml/MNIST_DCGAN.ipynb)).
-- StyleGAN for digits based on MNIST Dataset.([notebook](https://github.com/amansinclair/ml/blob/master/ml/MNIST_GAN_Style.ipynb)).
+- DCGAN for digits based on MNIST Dataset ([notebook](https://github.com/amansinclair/ml/blob/master/ml/MNIST_DCGAN.ipynb)).
+- StyleGAN for digits based on MNIST Dataset ([notebook](https://github.com/amansinclair/ml/blob/master/ml/MNIST_GAN_Style.ipynb)).
